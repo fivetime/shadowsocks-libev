@@ -70,6 +70,7 @@ struct server {
     char password[128];
     char fast_open[8];
     char no_delay[8];
+    char *acl;
     char *mode;
     char *method;
     char *plugin;

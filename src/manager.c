@@ -129,6 +129,8 @@ build_config(char *prefix, struct manager_ctx *manager, struct server *server)
         fprintf(f, ",\n\"no_delay\": true");
     if (manager->reuse_port)
         fprintf(f, ",\n\"reuse_port\": true");
+    if (server->acl)
+        fprintf(f, ",\n\"acl\":\"%s\"", server->acl);
     if (server->mode)
         fprintf(f, ",\n\"mode\":\"%s\"", server->mode);
     if (server->plugin)
@@ -325,6 +327,10 @@ get_server(char *buf, int len)
             } else if (strcmp(name, "mode") == 0) {
                 if (value->type == json_string) {
                     server->mode = strdup(value->u.string.ptr);
+                }
+            } else if (strcmp(name, "acl") == 0) {
+                if (value->type == json_string) {
+                    server->acl = strdup(value->u.string.ptr);
                 }
             } else {
                 LOGE("invalid data: %s", data);
