@@ -129,7 +129,7 @@ create_and_bind(const char *addr, const char *port)
 {
     struct addrinfo hints;
     struct addrinfo *result, *rp;
-    int s, listen_sock;
+    int s, listen_sock = -1;
 
     memset(&hints, 0, sizeof(struct addrinfo));
     hints.ai_family   = AF_UNSPEC;   /* Return IPv4 and IPv6 choices */
@@ -736,7 +736,11 @@ accept_cb(EV_P_ ev_io *w, int revents)
     int index                    = rand() % listener->remote_num;
     struct sockaddr *remote_addr = listener->remote_addr[index];
 
-    int remotefd = socket(remote_addr->sa_family, SOCK_STREAM, IPPROTO_TCP);
+    int protocol = IPPROTO_TCP;
+    if (listener->mptcp < 0) {
+        protocol = IPPROTO_MPTCP; // Enable upstream MPTCP
+    }
+    int remotefd = socket(remote_addr->sa_family, SOCK_STREAM, protocol);
     if (remotefd == -1) {
         ERROR("socket");
         return;
@@ -767,10 +771,11 @@ accept_cb(EV_P_ ev_io *w, int revents)
     setsockopt(remotefd, SOL_SOCKET, SO_NOSIGPIPE, &opt, sizeof(opt));
 #endif
 
+    // Enable out-of-tree MPTCP
     if (listener->mptcp > 1) {
         int err = setsockopt(remotefd, SOL_TCP, listener->mptcp, &opt, sizeof(opt));
         if (err == -1) {
-            ERROR("failed to enable multipath TCP");
+            ERROR("failed to enable out-of-tree multipath TCP");
         }
     } else if (listener->mptcp == 1) {
         int i = 0;
@@ -782,7 +787,7 @@ accept_cb(EV_P_ ev_io *w, int revents)
             i++;
         }
         if (listener->mptcp == 0) {
-            ERROR("failed to enable multipath TCP");
+            ERROR("failed to enable out-of-tree multipath TCP");
         }
     }
 
@@ -948,8 +953,9 @@ main(int argc, char **argv)
             LOGI("set MTU to %d", mtu);
             break;
         case GETOPT_VAL_MPTCP:
-            mptcp = 1;
-            LOGI("enable multipath TCP");
+            mptcp = get_mptcp(1);
+            if (mptcp)
+                LOGI("enable multipath TCP (%s)", mptcp > 0 ? "out-of-tree" : "upstream");
             break;
         case GETOPT_VAL_NODELAY:
             no_delay = 1;
@@ -1426,6 +1432,10 @@ main(int argc, char **argv)
     if (plugin != NULL) {
         stop_plugin();
     }
+
+    for (i = 0; i < remote_num; i++)
+        ss_free(listen_ctx.remote_addr[i]);
+    ss_free(listen_ctx.remote_addr);
 
 #ifdef __MINGW32__
     if (plugin_watcher.valid) {

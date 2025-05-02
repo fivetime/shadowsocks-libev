@@ -414,6 +414,12 @@ usage()
 #ifdef __linux__
     printf(
         "       [--mptcp]                  Enable Multipath TCP on MPTCP Kernel.\n");
+#ifdef USE_NFTABLES
+    printf(
+        "       [--nftables-sets <sets>]   Add malicious IP into nftables sets.\n");
+    printf(
+        "                                  sets spec: [<table1>:]<set1>[,[<table2>:]<set2>...]\n");
+#endif
 #endif
 #ifndef MODULE_MANAGER
     printf(
@@ -478,7 +484,7 @@ daemonize(const char *path)
     }
 
     int dev_null = open("/dev/null", O_WRONLY);
-    if (dev_null) {
+    if (dev_null > 0) {
         /* Redirect to null device  */
         dup2(dev_null, STDOUT_FILENO);
         dup2(dev_null, STDERR_FILENO);
@@ -571,4 +577,21 @@ load16_be(const void *s)
     const uint8_t *in = (const uint8_t *)s;
     return ((uint16_t)in[0] << 8)
            | ((uint16_t)in[1]);
+}
+
+int
+get_mptcp(int enable)
+{
+    const char oldpath[] = "/proc/sys/net/mptcp/mptcp_enabled";
+
+    if (enable) {
+        // Check if kernel has out-of-tree MPTCP support.
+        if (access(oldpath, F_OK) != -1)
+            return 1;
+
+        // Otherwise, just use IPPROTO_MPTCP.
+        return -1;
+    }
+
+    return 0;
 }
